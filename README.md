@@ -32,6 +32,140 @@ in public. `ghost-rizz` gives you three operations, at scale:
 Single static binary. Zero runtime dependencies (except `exiftool` for
 HEIC and video formats — see below).
 
+## How it works
+
+### High-level architecture
+
+```mermaid
+flowchart TD
+    A[User Input] --> B{Command}
+    B -->|generate| C[Generator]
+    B -->|clean| D[Processor - Clean Mode]
+    B -->|fuzz| E[Processor - Fuzz Mode]
+    B -->|report| F[Reporter]
+    
+    C --> G[Output Files]
+    D --> G
+    E --> G
+    F --> H[CSV Report]
+    
+    subgraph Engine
+        C --> I[Format Handlers]
+        D --> I
+        E --> I
+        F --> I
+    end
+    
+    I --> J[JPEG Handler]
+    I --> K[PNG Handler]
+    I --> L[HEIC Handler]
+    I --> M[Video Handler]
+    
+    J --> N[Native Go]
+    K --> N
+    L --> O[exiftool]
+    M --> O
+```
+
+### Command flow
+
+```mermaid
+flowchart LR
+    subgraph Generate
+        G1[ghost-rizz generate] --> G2[Create dummy images]
+        G2 --> G3[Inject EXIF via exifutil]
+        G3 --> G4[Write JPEG/PNG]
+    end
+    
+    subgraph Clean
+        CL1[ghost-rizz clean] --> CL2[Scan input dir]
+        CL2 --> CL3[Filter supported formats]
+        CL3 --> CL4[Worker pool]
+        CL4 --> CL5[Format handler]
+        CL5 --> CL6[DropExif]
+        CL6 --> CL7[Write output]
+    end
+    
+    subgraph Fuzz
+        FZ1[ghost-rizz fuzz] --> FZ2[Scan input dir]
+        FZ2 --> FZ3[Filter supported formats]
+        FZ3 --> FZ4[Worker pool]
+        FZ4 --> FZ5[Format handler]
+        FZ5 --> FZ6[SetExif random]
+        FZ6 --> FZ7[Write output]
+    end
+    
+    subgraph Report
+        RP1[ghost-rizz report] --> RP2[Scan input dir]
+        RP2 --> RP3[Filter supported formats]
+        RP3 --> RP4[Worker pool]
+        RP4 --> RP5[Format handler]
+        RP5 --> RP6[RawExif]
+        RP6 --> RP7[Parse EXIF tags]
+        RP7 --> RP8[CSV output]
+    end
+```
+
+### Internal processing pipeline
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as ghost-rizz CLI
+    participant Processor
+    participant Handler as Format Handler
+    participant FS as File System
+    
+    User->>CLI: ghost-rizz clean -in ./in -out ./out
+    CLI->>Processor: ProcessImages(in, out, "clean")
+    Processor->>FS: ReadDir(input)
+    FS-->>Processor: File list
+    loop For each file
+        Processor->>Handler: GetMediaHandler(path)
+        Handler-->>Processor: MediaHandler
+        Processor->>Handler: DropExif()
+        Handler-->>Processor: OK
+        Processor->>FS: Create output file
+        Processor->>Handler: Write(writer)
+        Handler-->>Processor: OK
+    end
+    Processor-->>CLI: Results
+    CLI-->>User: Done
+```
+
+### Video format processing (delegates to exiftool)
+
+```mermaid
+flowchart TD
+    subgraph Video Handler
+        VH1[Input video] --> VH2{Mode}
+        VH2 -->|clean| VH3[exiftool -all= -overwrite_original]
+        VH2 -->|fuzz| VH4[exiftool -all= + random tags]
+        VH2 -->|report| VH5[exiftool -j -G -a]
+        
+        VH3 --> VH6[Temp file]
+        VH4 --> VH6
+        VH5 --> VH7[JSON output]
+        
+        VH6 --> VH8[Read result]
+        VH8 --> VH9[Write to output]
+    end
+    
+    subgraph Random Tags for Fuzz
+        RT1[Make: random 10-char]
+        RT2[Model: random 12-char]
+        RT3[Software: random 15-char]
+        RT4[CreateDate: random datetime]
+        RT5[ModifyDate: random datetime]
+    end
+    
+    VH4 --> RT1
+    VH4 --> RT2
+    VH4 --> RT3
+    VH4 --> RT4
+    VH4 --> RT5
+```
+
 ## Install
 
 **macOS (Homebrew)**
