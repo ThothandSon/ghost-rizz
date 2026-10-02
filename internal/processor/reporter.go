@@ -187,19 +187,19 @@ func extractVideoMetadata(path string, row []string) {
 	}
 
 	// Extract common video metadata tags
-	row[2] = tagMap["QuickTime:Make"] // Make
-	row[3] = tagMap["QuickTime:Model"] // Model
-	row[4] = tagMap["QuickTime:Software"] // Software
-	row[5] = tagMap["QuickTime:CreateDate"] // DateTime
-	row[6] = tagMap["QuickTime:ModifyDate"] // DateTimeOriginal (using ModifyDate for video)
-	row[7] = "" // ExposureTime (not typically in video)
-	row[8] = tagMap["QuickTime:GPSLatitude"] // GPSLatitude
-	row[9] = tagMap["QuickTime:CreateDate"] // CreateDate
-	row[10] = tagMap["QuickTime:ModifyDate"] // ModifyDate
+	row[2] = tagMap["QuickTime:Make"]             // Make
+	row[3] = tagMap["QuickTime:Model"]            // Model
+	row[4] = tagMap["QuickTime:Software"]         // Software
+	row[5] = tagMap["QuickTime:CreateDate"]       // DateTime
+	row[6] = tagMap["QuickTime:ModifyDate"]       // DateTimeOriginal (using ModifyDate for video)
+	row[7] = ""                                   // ExposureTime (not typically in video)
+	row[8] = tagMap["QuickTime:GPSLatitude"]      // GPSLatitude
+	row[9] = tagMap["QuickTime:CreateDate"]       // CreateDate
+	row[10] = tagMap["QuickTime:ModifyDate"]      // ModifyDate
 	row[11] = tagMap["QuickTime:TrackCreateDate"] // TrackCreateDate
 	row[12] = tagMap["QuickTime:TrackModifyDate"] // TrackModifyDate
-	row[13] = tagMap["QuickTime:Duration"] // Duration
-	row[14] = tagMap["QuickTime:GPSLatitude"] // GPSLatitude
-	row[15] = tagMap["QuickTime:GPSLongitude"] // GPSLongitude
-	row[16] = tagMap["QuickTime:GPSAltitude"] // GPSAltitude
+	row[13] = tagMap["QuickTime:Duration"]        // Duration
+	row[14] = tagMap["QuickTime:GPSLatitude"]     // GPSLatitude
+	row[15] = tagMap["QuickTime:GPSLongitude"]    // GPSLongitude
+	row[16] = tagMap["QuickTime:GPSAltitude"]     // GPSAltitude
 }
