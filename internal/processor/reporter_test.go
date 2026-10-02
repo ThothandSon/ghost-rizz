@@ -227,3 +227,83 @@ func TestGenerateReport_MkdirAllError_Real_2(t *testing.T) {
 		t.Errorf("expected error when parent dir is a file")
 	}
 }
+
+// --- Video Report Tests ---
+
+func TestGenerateReport_Video(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available, skipping video report test")
+	}
+	inDir := t.TempDir()
+	outCSV := filepath.Join(inDir, "report.csv")
+
+	// Create dummy video files
+	_ = os.WriteFile(filepath.Join(inDir, "test.mp4"), []byte("fake video"), 0644)
+	_ = os.WriteFile(filepath.Join(inDir, "test.mov"), []byte("fake video"), 0644)
+
+	err := GenerateReport(inDir, outCSV)
+	if err != nil {
+		t.Errorf("GenerateReport failed for video: %v", err)
+	}
+
+	f, _ := os.Open(outCSV)
+	defer func() { _ = f.Close() }()
+	records, _ := csv.NewReader(f).ReadAll()
+	// Should have header + 2 video files
+	if len(records) != 3 {
+		t.Errorf("expected 3 rows in CSV, got %d", len(records))
+	}
+}
+
+func TestExtractVideoMetadata(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available, skipping extractVideoMetadata test")
+	}
+	tmpDir := t.TempDir()
+	if err := generator.GenerateImages(1, tmpDir); err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+	entries, _ := os.ReadDir(tmpDir)
+	src := filepath.Join(tmpDir, entries[0].Name())
+
+	// Rename to .mp4
+	mp4Src := filepath.Join(tmpDir, "test.mp4")
+	data, _ := os.ReadFile(src)
+	_ = os.WriteFile(mp4Src, data, 0644)
+
+	row := make([]string, 18)
+	extractVideoMetadata(mp4Src, row)
+
+	// Should have HasEXIF = "true" or "false" (depending on if exiftool finds metadata)
+	if row[1] != "true" && row[1] != "false" {
+		t.Errorf("expected HasEXIF to be true or false, got %q", row[1])
+	}
+}
+
+func TestExtractVideoMetadata_MissingFile(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available")
+	}
+	row := make([]string, 18)
+	extractVideoMetadata("/non/existent/file.mp4", row)
+	// Should handle gracefully (error or false)
+	if row[1] != "error" && row[1] != "false" {
+		t.Errorf("expected HasEXIF to be error or false for missing file, got %q", row[1])
+	}
+}
+
+func TestGenerateReport_Video_CheckExifTool(t *testing.T) {
+	inDir := t.TempDir()
+	outCSV := filepath.Join(inDir, "report.csv")
+	_ = os.WriteFile(filepath.Join(inDir, "test.mp4"), []byte("fake"), 0644)
+
+	oldPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", "")
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
+
+	err := GenerateReport(inDir, outCSV)
+	if err != nil {
+		// It may return error or write error to CSV
+		t.Logf("GenerateReport with missing exiftool: %v", err)
+	}
+}
