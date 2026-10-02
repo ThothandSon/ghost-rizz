@@ -23,7 +23,7 @@ func main() {
 
 func run(args []string) int {
 	if len(args) < 1 {
-		_, _ = fmt.Fprintln(stderr, "expected 'generate', 'fuzz' or 'report' subcommands")
+		_, _ = fmt.Fprintln(stderr, "expected 'generate', 'clean', 'fuzz' or 'report' subcommands")
 		return 1
 	}
 
@@ -32,11 +32,16 @@ func run(args []string) int {
 	genCount := generateCmd.Int("count", 10, "number of images to generate")
 	genOut := generateCmd.String("out", "./input_photos", "output directory for generated images")
 
+	cleanCmd := flag.NewFlagSet("clean", flag.ContinueOnError)
+	cleanCmd.SetOutput(stderr)
+	cleanIn := cleanCmd.String("in", "./input_photos", "input directory of images")
+	cleanOut := cleanCmd.String("out", "./output_photos", "output directory for processed images")
+
 	fuzzCmd := flag.NewFlagSet("fuzz", flag.ContinueOnError)
 	fuzzCmd.SetOutput(stderr)
 	fuzzIn := fuzzCmd.String("in", "./input_photos", "input directory of images")
 	fuzzOut := fuzzCmd.String("out", "./output_photos", "output directory for processed images")
-	fuzzMode := fuzzCmd.String("mode", "clean", "mode of operation: 'clean' or 'fuzz'")
+	fuzzMode := fuzzCmd.String("mode", "fuzz", "mode of operation: 'clean' or 'fuzz'")
 
 	reportCmd := flag.NewFlagSet("report", flag.ContinueOnError)
 	reportCmd.SetOutput(stderr)
@@ -58,6 +63,20 @@ func run(args []string) int {
 			return 1
 		}
 		_, _ = fmt.Fprintln(stdout, "Generation complete.")
+	case "clean":
+		if err := cleanCmd.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return 0
+			}
+			return 1
+		}
+		_, _ = fmt.Fprintf(stdout, "Cleaning images from %s to %s\n", *cleanIn, *cleanOut)
+		err := processor.ProcessImages(*cleanIn, *cleanOut, "clean")
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error processing images: %v\n", err)
+			return 1
+		}
+		_, _ = fmt.Fprintln(stdout, "Processing complete.")
 	case "fuzz":
 		if err := fuzzCmd.Parse(args[1:]); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
@@ -92,7 +111,7 @@ func run(args []string) int {
 		}
 		_, _ = fmt.Fprintln(stdout, "Report complete.")
 	default:
-		_, _ = fmt.Fprintln(stderr, "expected 'generate', 'fuzz' or 'report' subcommands")
+		_, _ = fmt.Fprintln(stderr, "expected 'generate', 'clean', 'fuzz' or 'report' subcommands")
 		return 1
 	}
 	return 0

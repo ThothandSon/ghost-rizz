@@ -2,8 +2,10 @@ package processor
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,7 +29,9 @@ func GenerateReport(inDir, outCSV string) error {
 
 	writer := csv.NewWriter(csvFile)
 
-	header := []string{"Filename", "HasEXIF", "Make", "Model", "Software", "DateTime", "DateTimeOriginal", "ExposureTime", "GPSLatitude", "Error"}
+	// Extended header for video metadata
+	header := []string{"Filename", "HasEXIF", "Make", "Model", "Software", "DateTime", "DateTimeOriginal", "ExposureTime", "GPSLatitude",
+		"CreateDate", "ModifyDate", "TrackCreateDate", "TrackModifyDate", "Duration", "GPSLatitude", "GPSLongitude", "GPSAltitude", "Error"}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
@@ -46,12 +50,24 @@ func GenerateReport(inDir, outCSV string) error {
 		wg.Add(1)
 		go func(path, name string) {
 			defer wg.Done()
-			row := []string{name, "false", "", "", "", "", "", "", "", ""}
+			row := []string{name, "false", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}
+
+			if isVideoFormat(name) {
+				if err := CheckExifTool(); err != nil {
+					row[1] = "error"
+					row[17] = err.Error()
+					rowCh <- row
+					return
+				}
+				extractVideoMetadata(path, row)
+				rowCh <- row
+				return
+			}
 
 			if strings.HasSuffix(strings.ToLower(name), ".heic") || strings.HasSuffix(strings.ToLower(name), ".heif") {
 				if err := CheckExifTool(); err != nil {
 					row[1] = "error"
-					row[9] = err.Error()
+					row[17] = err.Error()
 					rowCh <- row
 					return
 				}
@@ -60,7 +76,7 @@ func GenerateReport(inDir, outCSV string) error {
 			mh, err := GetMediaHandler(path)
 			if err != nil {
 				row[1] = "error"
-				row[9] = err.Error()
+				row[17] = err.Error()
 				rowCh <- row
 				return
 			}
@@ -69,7 +85,7 @@ func GenerateReport(inDir, outCSV string) error {
 			if err != nil {
 				if !strings.Contains(err.Error(), "no exif data") {
 					row[1] = "error"
-					row[9] = err.Error()
+					row[17] = err.Error()
 				}
 				rowCh <- row
 				return
@@ -135,4 +151,55 @@ func GenerateReport(inDir, outCSV string) error {
 	}
 
 	return nil
+}
+
+// extractVideoMetadata uses exiftool JSON output to extract metadata from video files
+func extractVideoMetadata(path string, row []string) {
+	cmd := exec.Command("exiftool", "-j", "-G", "-a", "--", path)
+	out, err := cmd.Output()
+	if err != nil {
+		row[1] = "error"
+		row[17] = err.Error()
+		return
+	}
+
+	var results []map[string]interface{}
+	if err := json.Unmarshal(out, &results); err != nil {
+		row[1] = "error"
+		row[17] = err.Error()
+		return
+	}
+
+	if len(results) == 0 {
+		row[1] = "false"
+		return
+	}
+
+	data := results[0]
+	row[1] = "true"
+
+	// Map video metadata tags (QuickTime group)
+	tagMap := make(map[string]string)
+	for k, v := range data {
+		if strVal, ok := v.(string); ok {
+			tagMap[k] = strVal
+		}
+	}
+
+	// Extract common video metadata tags
+	row[2] = tagMap["QuickTime:Make"] // Make
+	row[3] = tagMap["QuickTime:Model"] // Model
+	row[4] = tagMap["QuickTime:Software"] // Software
+	row[5] = tagMap["QuickTime:CreateDate"] // DateTime
+	row[6] = tagMap["QuickTime:ModifyDate"] // DateTimeOriginal (using ModifyDate for video)
+	row[7] = "" // ExposureTime (not typically in video)
+	row[8] = tagMap["QuickTime:GPSLatitude"] // GPSLatitude
+	row[9] = tagMap["QuickTime:CreateDate"] // CreateDate
+	row[10] = tagMap["QuickTime:ModifyDate"] // ModifyDate
+	row[11] = tagMap["QuickTime:TrackCreateDate"] // TrackCreateDate
+	row[12] = tagMap["QuickTime:TrackModifyDate"] // TrackModifyDate
+	row[13] = tagMap["QuickTime:Duration"] // Duration
+	row[14] = tagMap["QuickTime:GPSLatitude"] // GPSLatitude
+	row[15] = tagMap["QuickTime:GPSLongitude"] // GPSLongitude
+	row[16] = tagMap["QuickTime:GPSAltitude"] // GPSAltitude
 }

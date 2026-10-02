@@ -30,7 +30,7 @@ in public. `ghost-rizz` gives you three operations, at scale:
 - **`report`** — extract every tag to CSV for audit.
 
 Single static binary. Zero runtime dependencies (except `exiftool` for
-HEIC — see below).
+HEIC and video formats — see below).
 
 ## Install
 
@@ -69,6 +69,11 @@ ghost-rizz report -in ./demo   # writes demo/report.csv
 
 # 3. Strip metadata
 ghost-rizz clean -in ./demo -out ./clean
+
+# 4. Process videos (MP4, MOV, MKV, etc.)
+ghost-rizz report -in ./videos
+ghost-rizz clean -in ./videos -out ./clean_videos
+ghost-rizz fuzz -in ./videos -out ./fuzz_videos -mode fuzz
 ```
 
 ## Commands
@@ -113,6 +118,13 @@ tells you exactly what you're about to delete.
 | **JPEG** (`.jpg`, `.jpeg`) | Native, fast | Full read/write |
 | **PNG** (`.png`) | Native, fast | Reads `tEXt`/`iTXt` chunks |
 | **HEIC / HEIF** (`.heic`, `.heif`) | Delegates to `exiftool` | Requires `exiftool` installed. HEIC `fuzz` currently only randomizes Make, Model, Software. |
+| **MP4** (`.mp4`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **MOV** (`.mov`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **MKV** (`.mkv`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **AVI** (`.avi`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **WebM** (`.webm`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **M4V** (`.m4v`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
+| **3GP** (`.3gp`) | Delegates to `exiftool` | Requires `exiftool` installed. Full clean/fuzz/report support. |
 
 ## Benchmark
 
@@ -155,10 +167,10 @@ Coverage is enforced at 85% by CI. Contributions welcome — see the
 - **You need a GUI, watch folders, or presets by persona** — try
   [Lethe](https://thothandson.github.io/lethe), a paid desktop app built
   on top of this same engine. Same author (Thoth & Son).
-- **You need PDF, DOCX, MP4, RAW or exotic formats** —
+- **You need PDF, DOCX, RAW or exotic formats** —
   [`exiftool`](https://exiftool.org) by Phil Harvey has 20 years of
   coverage `ghost-rizz` will never match. Use `exiftool` for those cases;
-  use `ghost-rizz` for the JPEG/PNG/HEIC hot path.
+  use `ghost-rizz` for the JPEG/PNG/HEIC/Video hot path.
 - **You want an ebook on how to use these tools well** — see
   *Rastro Zero* (PT-BR) at thothandson.github.io/lethe.
 

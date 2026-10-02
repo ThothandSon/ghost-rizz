@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/dsoprea/go-exif/v3"
 	jpegstructure "github.com/dsoprea/go-jpeg-image-structure/v2"
@@ -40,6 +42,8 @@ func GetMediaHandler(path string) (MediaHandler, error) {
 		return &pngHandler{cs: intfc.(*pngstructure.ChunkSlice)}, nil
 	} else if strings.HasSuffix(lower, ".heic") || strings.HasSuffix(lower, ".heif") {
 		return &heicHandler{filepath: path}, nil
+	} else if isVideoFormat(lower) {
+		return &videoHandler{filepath: path}, nil
 	}
 	return nil, fmt.Errorf("unsupported file format: %s", path)
 }
@@ -180,7 +184,8 @@ func (h *heicHandler) Write(w io.Writer) error {
 
 	if cmd != nil {
 		out, err := cmd.CombinedOutput()
-		if err != nil || strings.Contains(string(out), "0 image files updated") {
+		// "0 image files updated" means no metadata was found to strip - this is OK
+		if err != nil && !strings.Contains(string(out), "0 image files updated") {
 			return fmt.Errorf("exiftool error: %v, output: %s", err, string(out))
 		}
 	}
@@ -205,4 +210,111 @@ func (h *heicHandler) RawExif() ([]byte, error) {
 		return nil, fmt.Errorf("no exif data")
 	}
 	return out, nil
+}
+
+// --- Video Handler ---
+
+type videoHandler struct {
+	filepath string
+	mode     string
+}
+
+func (h *videoHandler) DropExif() error {
+	h.mode = "clean"
+	return nil
+}
+
+func (h *videoHandler) SetExif(ib *exif.IfdBuilder) error {
+	h.mode = "fuzz"
+	if ib != nil {
+		return errors.New("setting EXIF from IfdBuilder is unsupported for video formats")
+	}
+	return nil
+}
+
+func (h *videoHandler) Write(w io.Writer) error {
+	if h.mode == "" {
+		input, err := os.ReadFile(h.filepath)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(input)
+		return err
+	}
+
+	tmpFile, err := os.CreateTemp("", "ghost-rizz-video-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmpFile.Name()
+	defer func() { _ = tmpFile.Close(); _ = os.Remove(tmpName) }()
+
+	src, err := os.Open(h.filepath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = src.Close() }()
+
+	if _, err = io.Copy(tmpFile, src); err != nil {
+		return err
+	}
+	_ = tmpFile.Close()
+
+	var cmd *exec.Cmd
+	switch h.mode {
+	case "clean":
+		cmd = exec.Command("exiftool", "-all=", "-overwrite_original", "--", tmpName)
+	case "fuzz":
+		// Strip all metadata and add randomized values for common video tags
+		cmd = exec.Command("exiftool",
+			"-all=", "-overwrite_original",
+			"-Make="+generateRandomString(10),
+			"-Model="+generateRandomString(12),
+			"-Software="+generateRandomString(15),
+			"-CreateDate="+generateRandomDateTime(),
+			"-ModifyDate="+generateRandomDateTime(),
+			"--", tmpName)
+	}
+
+	if cmd != nil {
+		out, err := cmd.CombinedOutput()
+		// "0 image files updated" means no metadata was found to strip - this is OK for clean mode
+		// For fuzz mode, we're adding new metadata so it should update
+		if err != nil && !strings.Contains(string(out), "0 image files updated") {
+			return fmt.Errorf("exiftool error: %v, output: %s", err, string(out))
+		}
+	}
+
+	updated, err := os.Open(tmpName)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = updated.Close() }()
+
+	_, err = io.Copy(w, updated)
+	return err
+}
+
+func (h *videoHandler) RawExif() ([]byte, error) {
+	cmd := exec.Command("exiftool", "-j", "-G", "-a", "--", h.filepath)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no metadata found")
+	}
+	return out, nil
+}
+
+// generateRandomDateTime generates a random date/time string in exiftool format
+func generateRandomDateTime() string {
+	year := rand.IntN(130) + 1970
+	month := rand.IntN(12) + 1
+	t := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC)
+	maxDays := t.Day()
+	day := rand.IntN(maxDays) + 1
+	return fmt.Sprintf("%04d:%02d:%02d %02d:%02d:%02d",
+		year, month, day,
+		rand.IntN(24), rand.IntN(60), rand.IntN(60))
 }
