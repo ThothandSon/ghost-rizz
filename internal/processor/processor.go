@@ -11,8 +11,18 @@ import (
 )
 
 func isSupportedFormat(filename string) bool {
+	// Skip macOS resource fork files (._*)
+	if strings.HasPrefix(filename, "._") {
+		return false
+	}
 	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".heic" || ext == ".heif"
+	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".heic" || ext == ".heif" ||
+		ext == ".mp4" || ext == ".mov" || ext == ".mkv" || ext == ".avi" || ext == ".webm" || ext == ".m4v" || ext == ".3gp"
+}
+
+func isVideoFormat(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".mp4" || ext == ".mov" || ext == ".mkv" || ext == ".avi" || ext == ".webm" || ext == ".m4v" || ext == ".3gp"
 }
 
 // ProcessImages reads supported image files from inDir, processes them using

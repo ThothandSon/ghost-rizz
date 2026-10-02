@@ -32,9 +32,9 @@ func processSingleImage(inPath, outPath, mode string) error {
 		}
 		err = mh.SetExif(ib)
 		if err != nil {
-			// If the handler doesn't support a full IfdBuilder (like HEIC),
+			// If the handler doesn't support a full IfdBuilder (like HEIC or video),
 			// we fallback to its internal fuzzing if it allows SetExif(nil).
-			if strings.Contains(err.Error(), "unsupported for HEIC") {
+			if strings.Contains(err.Error(), "unsupported for HEIC") || strings.Contains(err.Error(), "unsupported for video") {
 				_ = mh.SetExif(nil)
 			} else {
 				return err

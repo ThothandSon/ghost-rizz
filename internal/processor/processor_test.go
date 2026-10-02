@@ -20,6 +20,15 @@ func TestIsSupportedFormat(t *testing.T) {
 		{"png", "test.png", true},
 		{"heic", "test.heic", true},
 		{"heif", "test.heif", true},
+		{"mp4", "test.mp4", true},
+		{"mov", "test.mov", true},
+		{"mkv", "test.mkv", true},
+		{"avi", "test.avi", true},
+		{"webm", "test.webm", true},
+		{"m4v", "test.m4v", true},
+		{"3gp", "test.3gp", true},
+		{"MP4", "test.MP4", true},
+		{"MOV", "test.MOV", true},
 		{"JPG", "test.JPG", true},
 		{"JPEG", "test.JPEG", true},
 		{"JpG", "test.JpG", true},
@@ -48,14 +57,14 @@ func TestIsSupportedFormat(t *testing.T) {
 		{"hEiF", "test.hEiF", true},
 		{"jPg", "test.jPg", true},
 		{"hEiF", "test.hEiF", true},
-		{"jPg", "test.jPg", true},
-		{"hEiF", "test.hEiF", true},
 		{"no_ext", "test", false},
 		{"empty", "", false},
 		{"dot", ".", false},
 		{"heic_upper", "test.HEIC", true},
 		{"mixed_png", "test.pNg", true},
 		{"upper", "TEST.JPG", true},
+		{"macos_resource_fork", "._test.jpg", false},
+		{"macos_resource_fork_mp4", "._test.mp4", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -150,6 +159,34 @@ func TestProcessImages_HEIC(t *testing.T) {
 	err := ProcessImages(inDir, outDir, "clean")
 	if err != nil {
 		t.Errorf("expected success with mock exiftool, got: %v", err)
+	}
+}
+
+func TestProcessImages_Video(t *testing.T) {
+	inDir := t.TempDir()
+	outDir := t.TempDir()
+
+	// Create dummy video files
+	_ = os.WriteFile(filepath.Join(inDir, "test.mp4"), []byte("fake mp4"), 0644)
+	_ = os.WriteFile(filepath.Join(inDir, "test.mov"), []byte("fake mov"), 0644)
+
+	// Mock exiftool to avoid integration failures with real exiftool on fake files
+	tmpMockDir := t.TempDir()
+	mockPath := filepath.Join(tmpMockDir, "exiftool")
+	_ = os.WriteFile(mockPath, []byte("#!/bin/sh\necho 'mock success'\nexit 0\n"), 0755)
+
+	oldPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", tmpMockDir+string(os.PathListSeparator)+oldPath)
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
+
+	err := ProcessImages(inDir, outDir, "clean")
+	if err != nil {
+		t.Errorf("expected success with mock exiftool, got: %v", err)
+	}
+
+	err = ProcessImages(inDir, outDir, "fuzz")
+	if err != nil {
+		t.Errorf("expected success with mock exiftool for fuzz, got: %v", err)
 	}
 }
 

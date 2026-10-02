@@ -22,13 +22,13 @@ func TestRunCommand(t *testing.T) {
 			name:       "No arguments",
 			args:       []string{},
 			wantExit:   1,
-			wantOutput: []string{"expected 'generate', 'fuzz' or 'report' subcommands"},
+			wantOutput: []string{"expected 'generate', 'clean', 'fuzz' or 'report' subcommands"},
 		},
 		{
 			name:       "Unknown argument",
 			args:       []string{"unknown"},
 			wantExit:   1,
-			wantOutput: []string{"expected 'generate', 'fuzz' or 'report' subcommands"},
+			wantOutput: []string{"expected 'generate', 'clean', 'fuzz' or 'report' subcommands"},
 		},
 		{
 			name:       "Generate successfully",

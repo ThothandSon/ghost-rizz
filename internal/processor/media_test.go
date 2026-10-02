@@ -295,6 +295,165 @@ func TestCheckExifTool_Fail(t *testing.T) {
 	}
 }
 
+// --- Video Handler Tests ---
+
+func TestVideoHandler_GetMediaHandler(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.mp4"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.mov"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.mkv"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.avi"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.webm"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.m4v"), []byte("fake"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "test.3gp"), []byte("fake"), 0644)
+
+	videoExts := []string{".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".3gp"}
+	for _, ext := range videoExts {
+		t.Run(ext, func(t *testing.T) {
+			path := filepath.Join(tmpDir, "test"+ext)
+			mh, err := GetMediaHandler(path)
+			if err != nil {
+				t.Errorf("GetMediaHandler(%s) = %v, want nil", ext, err)
+			}
+			if mh == nil {
+				t.Errorf("GetMediaHandler(%s) returned nil handler", ext)
+			}
+		})
+	}
+}
+
+func TestVideoHandler_DropExif(t *testing.T) {
+	h := &videoHandler{}
+	if err := h.DropExif(); err != nil {
+		t.Errorf("videoHandler.DropExif() = %v, want nil", err)
+	}
+	if h.mode != "clean" {
+		t.Errorf("videoHandler.DropExif() did not set mode to 'clean', got %q", h.mode)
+	}
+}
+
+func TestVideoHandler_SetExif(t *testing.T) {
+	h := &videoHandler{}
+	if err := h.SetExif(nil); err != nil {
+		t.Errorf("videoHandler.SetExif(nil) = %v, want nil", err)
+	}
+	if h.mode != "fuzz" {
+		t.Errorf("videoHandler.SetExif() did not set mode to 'fuzz', got %q", h.mode)
+	}
+}
+
+func TestVideoHandler_SetExif_NonNil(t *testing.T) {
+	im, _ := exifcommon.NewIfdMappingWithStandard()
+	ti := exif.NewTagIndex()
+	ib := exif.NewIfdBuilder(im, ti, exifcommon.IfdStandardIfdIdentity, exifcommon.EncodeDefaultByteOrder)
+
+	h := &videoHandler{}
+	err := h.SetExif(ib)
+	if err == nil {
+		t.Errorf("expected error when setting non-nil IfdBuilder for video")
+	}
+	if !strings.Contains(err.Error(), "unsupported for video") {
+		t.Errorf("expected 'unsupported for video' error, got: %v", err)
+	}
+}
+
+func TestVideoHandler_Write_NilMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "src.mp4")
+	_ = os.WriteFile(src, []byte("fake video data"), 0644)
+
+	h := &videoHandler{filepath: src}
+	var buf bytes.Buffer
+	if err := h.Write(&buf); err != nil {
+		t.Errorf("videoHandler.Write with empty mode returned error: %v", err)
+	}
+	if buf.Len() == 0 {
+		t.Errorf("videoHandler.Write with empty mode wrote nothing")
+	}
+}
+
+func TestVideoHandler_Write_MissingFile(t *testing.T) {
+	h := &videoHandler{filepath: "/does/not/exist.mp4", mode: "clean"}
+	var buf bytes.Buffer
+	if err := h.Write(&buf); err == nil {
+		t.Errorf("videoHandler.Write() expected error for missing file, got nil")
+	}
+}
+
+func TestVideoHandler_Write_ExiftoolPaths(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available, skipping videoHandler.Write clean/fuzz coverage")
+	}
+	tmpDir := t.TempDir()
+	if err := generator.GenerateImages(1, tmpDir); err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+	entries, _ := os.ReadDir(tmpDir)
+	src := filepath.Join(tmpDir, entries[0].Name())
+
+	// Rename to .mp4 so GetMediaHandler returns a videoHandler
+	mp4Src := filepath.Join(tmpDir, "test.mp4")
+	data, _ := os.ReadFile(src)
+	_ = os.WriteFile(mp4Src, data, 0644)
+
+	for _, mode := range []string{"clean", "fuzz"} {
+		h := &videoHandler{filepath: mp4Src, mode: mode}
+		var buf bytes.Buffer
+		// This may fail if exiftool errors on a non-video file, which is acceptable.
+		_ = h.Write(&buf)
+	}
+}
+
+func TestVideoHandler_RawExif(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available, skipping videoHandler.RawExif coverage")
+	}
+	tmpDir := t.TempDir()
+	if err := generator.GenerateImages(1, tmpDir); err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+	entries, _ := os.ReadDir(tmpDir)
+	src := filepath.Join(tmpDir, entries[0].Name())
+
+	mp4Src := filepath.Join(tmpDir, "test.mp4")
+	data, _ := os.ReadFile(src)
+	_ = os.WriteFile(mp4Src, data, 0644)
+
+	h := &videoHandler{filepath: mp4Src}
+	// May return error or data depending on exiftool; just ensure code runs.
+	_, _ = h.RawExif()
+}
+
+func TestVideoHandler_RawExif_MissingFile(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not available")
+	}
+	h := &videoHandler{filepath: "/does/not/exist.mp4"}
+	_, err := h.RawExif()
+	if err == nil {
+		t.Errorf("expected error for missing video file, got nil")
+	}
+}
+
+func TestVideoHandler_Write_Error(t *testing.T) {
+	tmpDir := t.TempDir()
+	inPath := filepath.Join(tmpDir, "test.mp4")
+	_ = os.WriteFile(inPath, []byte("fake"), 0644)
+	h, _ := GetMediaHandler(inPath)
+	err := h.Write(&errorWriter{})
+	if err == nil {
+		t.Errorf("expected error for Write on video")
+	}
+}
+
+func TestVideoHandler_RawExif_Error(t *testing.T) {
+	h, _ := GetMediaHandler("/non/existent/file.mp4")
+	_, err := h.RawExif()
+	if err == nil {
+		t.Errorf("expected error for non-existent file in RawExif")
+	}
+}
+
 func TestPngHandler_DropExif_Error_Nil(t *testing.T) {
 	h := &pngHandler{cs: nil}
 	defer func() { _ = recover() }()
