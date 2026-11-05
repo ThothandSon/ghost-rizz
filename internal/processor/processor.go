@@ -25,23 +25,38 @@ func isVideoFormat(filename string) bool {
 	return ext == ".mp4" || ext == ".mov" || ext == ".mkv" || ext == ".avi" || ext == ".webm" || ext == ".m4v" || ext == ".3gp"
 }
 
+// Summary counts the files a run handled.
+type Summary struct {
+	Processed int // written successfully
+	Failed    int // supported files that could not be processed
+	Skipped   int // entries that are not supported media
+}
+
 // ProcessImages reads supported image files from inDir, processes them using
 // the specified mode, and writes the results to outDir.
 func ProcessImages(inDir, outDir, mode string) error {
+	_, err := ProcessDir(inDir, outDir, mode)
+	return err
+}
+
+// ProcessDir is ProcessImages with a count of what happened, for the CLI's summary.
+func ProcessDir(inDir, outDir, mode string) (Summary, error) {
+	var summary Summary
 	absIn, _ := filepath.Abs(inDir)
 	absOut, _ := filepath.Abs(outDir)
 	if absIn == absOut {
-		return errors.New("input and output directories must be different")
+		return summary, errors.New("input and output directories must be different")
 	}
 
 	files, err := os.ReadDir(inDir)
 	if err != nil {
-		return err
+		return summary, err
 	}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
-		return err
+		return summary, err
 	}
+	queued := 0
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(files))
@@ -51,6 +66,7 @@ func ProcessImages(inDir, outDir, mode string) error {
 
 	for _, file := range files {
 		if file.IsDir() || !isSupportedFormat(file.Name()) {
+			summary.Skipped++
 			continue
 		}
 
@@ -58,7 +74,7 @@ func ProcessImages(inDir, outDir, mode string) error {
 		if strings.HasSuffix(strings.ToLower(file.Name()), ".heic") || strings.HasSuffix(strings.ToLower(file.Name()), ".heif") {
 			if err := CheckExifTool(); err != nil {
 				// We fail early here if a required tool for this file type is missing
-				return fmt.Errorf("exiftool check failed for %s: %w", file.Name(), err)
+				return summary, fmt.Errorf("exiftool check failed for %s: %w", file.Name(), err)
 			}
 		}
 
@@ -67,6 +83,7 @@ func ProcessImages(inDir, outDir, mode string) error {
 		base := strings.TrimSuffix(file.Name(), ext)
 		outPath := filepath.Join(outDir, fmt.Sprintf("%s_%s%s", base, mode, ext))
 
+		queued++
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(in, out string) {
@@ -85,5 +102,7 @@ func ProcessImages(inDir, outDir, mode string) error {
 	for err := range errCh {
 		errs = append(errs, err)
 	}
-	return errors.Join(errs...)
+	summary.Failed = len(errs)
+	summary.Processed = queued - summary.Failed
+	return summary, errors.Join(errs...)
 }

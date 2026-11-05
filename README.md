@@ -3,19 +3,7 @@
 **Concurrent EXIF metadata cleaner and fuzzer, written in pure Go.**
 Strip, fuzz or audit the metadata of thousands of images per second.
 
-```
-$ ghost-rizz report -in ./photos
-   1204 files scanned in 0.31s → report.csv
-
-$ ghost-rizz clean -in ./photos -out ./clean
-   1204 files stripped in 0.22s
-```
-
-<sub>Companion product: **[Lethe](https://thothandson.github.io/lethe)** — same
-engine, wrapped in a desktop app with presets, watch folders and paid
-support. `ghost-rizz` is and will remain free.</sub>
-
----
+![ghost-rizz cleaning a thousand photos](docs/screenshots/clean.png)
 
 ## Why this exists
 
@@ -168,46 +156,69 @@ flowchart TD
 
 ## Install
 
-**macOS (Homebrew)**
-```
-brew install ThothandSon/tap/ghost-rizz
+**Prebuilt binaries.** Every [release](https://github.com/ThothandSon/ghost-rizz/releases/latest) has archives for macOS (one universal binary for Apple silicon and Intel), Linux and Windows, on amd64 and arm64, plus `checksums.txt`.
+
+```bash
+# macOS, from the v1.0.0 release; other platforms use _linux_amd64, _linux_arm64 or _windows_*.zip
+curl -LO https://github.com/ThothandSon/ghost-rizz/releases/download/v1.0.0/ghost-rizz_1.0.0_darwin_all.tar.gz
+tar xzf ghost-rizz_1.0.0_darwin_all.tar.gz
+sudo mv ghost-rizz /usr/local/bin/
 ```
 
-**Windows (Scoop)**
-```
-scoop bucket add thothandson https://github.com/ThothandSon/scoop-bucket
-scoop install ghost-rizz
+**With Go** (1.24+):
+
+```bash
+go install github.com/ThothandSon/ghost-rizz/cmd/ghost-rizz@latest
 ```
 
-**Linux / other**
+**From source:**
 
-Download the pre-built binary for your architecture from the
-[latest release](https://github.com/ThothandSon/ghost-rizz/releases/latest)
-and put it on your `PATH`.
-
-**From source** (requires Go 1.22+)
-```
+```bash
 git clone https://github.com/ThothandSon/ghost-rizz
 cd ghost-rizz
 go build -o ghost-rizz ./cmd/ghost-rizz
 ```
 
-## Quick start
+HEIC and video files need [`exiftool`](https://exiftool.org) on your `PATH` (`brew install exiftool`, `apt install libimage-exiftool-perl`). JPEG and PNG need nothing else.
 
-```
-# 1. Generate 100 test images with EXIF injected
-ghost-rizz generate -count 100 -out ./demo
+## Walkthrough
 
-# 2. Audit what they contain
-ghost-rizz report -in ./demo   # writes demo/report.csv
+Running `ghost-rizz` with no arguments shows what it can do:
 
-# 3. Strip metadata
-ghost-rizz clean -in ./demo -out ./clean
+![ghost-rizz help](docs/screenshots/help.png)
 
-# 4. Process videos (MP4, MOV, MKV, etc.)
-ghost-rizz report -in ./videos
-ghost-rizz clean -in ./videos -out ./clean_videos
-ghost-rizz fuzz -in ./videos -out ./fuzz_videos -mode fuzz
+### 1. Audit before you change anything
+
+`report` reads every supported file in a folder and writes one CSV row per file. Nothing is modified. Here the camera make, model and GPS position are exactly what you'd want to remove before publishing.
+
+![report](docs/screenshots/report.png)
+
+By default `report.csv` lands in the folder you scanned, so a later `clean` of that folder mentions it as one skipped entry. Use `-out` to put reports elsewhere.
+
+### 2. Strip it all
+
+`clean` writes metadata-free copies to the output folder with a `_clean` suffix. Running `report` on the result is the quickest proof that nothing readable is left.
+
+![clean](docs/screenshots/clean.png)
+
+### 3. Or replace it with noise
+
+`fuzz` keeps the metadata structure and swaps the values for random ones: useful for testing ingestion pipelines, or for breaking naive fingerprinting.
+
+![fuzz](docs/screenshots/fuzz.png)
+
+### 4. When something fails
+
+Unsupported files are counted and skipped. Files that can't be processed are named with the reason, and the exit code is 1, so scripts can tell.
+
+![a partial failure](docs/screenshots/errors.png)
+
+### Test data
+
+`generate` creates JPEG and PNG images with realistic metadata, so you can try everything above without touching your own photos:
+
+```bash
+ghost-rizz generate -count 1000 -out ./photos
 ```
 
 ## Commands
@@ -298,15 +309,10 @@ Coverage is enforced at 85% by CI. Contributions welcome — see the
 
 ## When `ghost-rizz` is not enough
 
-- **You need a GUI, watch folders, or presets by persona** — try
-  [Lethe](https://thothandson.github.io/lethe), a paid desktop app built
-  on top of this same engine. Same author (Thoth & Son).
 - **You need PDF, DOCX, RAW or exotic formats** —
   [`exiftool`](https://exiftool.org) by Phil Harvey has 20 years of
   coverage `ghost-rizz` will never match. Use `exiftool` for those cases;
   use `ghost-rizz` for the JPEG/PNG/HEIC/Video hot path.
-- **You want an ebook on how to use these tools well** — see
-  *Rastro Zero* (PT-BR) at thothandson.github.io/lethe.
 
 ## License
 
