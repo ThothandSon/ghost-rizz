@@ -14,16 +14,30 @@ import (
 	"github.com/dsoprea/go-exif/v3"
 )
 
+// ReportSummary counts what a report found.
+type ReportSummary struct {
+	Files        int
+	WithMetadata int
+	Failed       int
+}
+
 // GenerateReport scans a directory for supported images and outputs a CSV report of their EXIF metadata.
 func GenerateReport(inDir, outCSV string) error {
+	_, err := ReportDir(inDir, outCSV)
+	return err
+}
+
+// ReportDir is GenerateReport with a count of files reported and of how many carried metadata.
+func ReportDir(inDir, outCSV string) (ReportSummary, error) {
+	var summary ReportSummary
 	files, err := os.ReadDir(inDir)
 	if err != nil {
-		return err
+		return summary, err
 	}
 
 	csvFile, err := os.Create(outCSV)
 	if err != nil {
-		return err
+		return summary, err
 	}
 	defer func() { _ = csvFile.Close() }()
 
@@ -33,7 +47,7 @@ func GenerateReport(inDir, outCSV string) error {
 	header := []string{"Filename", "HasEXIF", "Make", "Model", "Software", "DateTime", "DateTimeOriginal", "ExposureTime", "GPSLatitude",
 		"CreateDate", "ModifyDate", "TrackCreateDate", "TrackModifyDate", "Duration", "GPSLatitude", "GPSLongitude", "GPSAltitude", "Error"}
 	if err := writer.Write(header); err != nil {
-		return err
+		return summary, err
 	}
 
 	rowCh := make(chan []string, len(files))
@@ -97,14 +111,16 @@ func GenerateReport(inDir, outCSV string) error {
 			if err == nil {
 				tagMap := make(map[string]string)
 				for _, t := range flatTags {
-					// Key by IfdPath and TagName to avoid collisions (e.g. IFD0 vs ExifIFD)
+					// Key by IfdPath and TagName to avoid collisions (e.g. IFD vs IFD/Exif)
 					key := fmt.Sprintf("%s:%s", t.IfdPath, t.TagName)
-					tagMap[key] = t.FormattedFirst
+					// Formatted keeps every component (a GPS coordinate is three rationals), unlike FormattedFirst.
+					tagMap[key] = strings.Trim(t.Formatted, "[]")
 				}
-				row[2] = tagMap["IFD0:Make"]
-				row[3] = tagMap["IFD0:Model"]
-				row[4] = tagMap["IFD0:Software"]
-				row[5] = tagMap["IFD0:DateTime"]
+				// go-exif v3 names the primary image directory (IFD0) "IFD".
+				row[2] = tagMap["IFD:Make"]
+				row[3] = tagMap["IFD:Model"]
+				row[4] = tagMap["IFD:Software"]
+				row[5] = tagMap["IFD:DateTime"]
 				row[6] = tagMap["IFD/Exif:DateTimeOriginal"]
 				row[7] = tagMap["IFD/Exif:ExposureTime"]
 				row[8] = tagMap["IFD/GPSInfo:GPSLatitude"]
@@ -127,6 +143,15 @@ func GenerateReport(inDir, outCSV string) error {
 	sort.Slice(rows, func(i, j int) bool {
 		return rows[i][0] < rows[j][0]
 	})
+	for _, row := range rows {
+		summary.Files++
+		switch row[1] {
+		case "true":
+			summary.WithMetadata++
+		case "error":
+			summary.Failed++
+		}
+	}
 
 	var writeErr error
 	for _, row := range rows {
@@ -147,10 +172,10 @@ func GenerateReport(inDir, outCSV string) error {
 	if writeErr != nil {
 		_ = csvFile.Close()
 		_ = os.Remove(outCSV) // Remove partial/broken report
-		return writeErr
+		return summary, writeErr
 	}
 
-	return nil
+	return summary, nil
 }
 
 // extractVideoMetadata uses exiftool JSON output to extract metadata from video files

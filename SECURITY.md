@@ -133,9 +133,5 @@ mention which file failed.
 
 ## Related projects
 
-- **[Lethe](https://thothandson.github.io/lethe)** — desktop app on top
-  of the same engine, with paid support and audit-friendly features.
 - **[exiftool](https://exiftool.org)** — the canonical reference for
   reading and writing metadata in dozens of formats.
-- **[O Rastro Invisível](https://thothandson.github.io/lethe)** — PT-BR
-  ebook on personal security through metadata hygiene.
